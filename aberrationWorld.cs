@@ -23,9 +23,6 @@ namespace aberration {
         public override void ModifyWorldGenTasks(List<GenPass> tasks, ref float totalWeight) {
             List<Vector2> majorCaves = new List<Vector2> { };
             // Because world generation is like layering several images ontop of each other, we need to do some steps between the original world generation steps.
-
-            // The first step is an Ore. Most vanilla ores are generated in a step called "Shinies", so for maximum compatibility, we will also do this.
-            // First, we find out which step "Shinies" is.
             GenPass smooth = tasks.Find(t => t.Name == "Smooth World");
             tasks.RemoveRange(1, tasks.Count - 1);
 
@@ -35,7 +32,10 @@ namespace aberration {
                 Main.rockLayer = Main.worldSurface + 100;
                 for (int x = 0; x < Main.maxTilesX; x++) {
                     for (int y = (int)Main.rockLayer; y < Main.maxTilesY - 200; y++) {
-                        WorldGen.PlaceTile(x, y, TileID.Stone);
+                        Main.tile[x, y].active(active: true);
+                        Main.tile[x, y].type = TileID.Stone;
+                        Main.tile[x, y].frameX = -1;
+                        Main.tile[x, y].frameY = -1;
                     }
                     progress.Set(x / (float)Main.maxTilesX);
                 }
@@ -154,7 +154,6 @@ namespace aberration {
                     garden((int)gardenSites[i].X, (int)gardenSites[i].Y, 20);
                 }
             }));
-
             tasks.Add(new PassLegacy("Smoothing", delegate (GenerationProgress progress) {
                 progress.Message = "Erosion";
                 smooth.Apply(new GenerationProgress()); // I have no clue how Smoothing does it's GenerationProgress so I decided to hold my ears and sing LALALALA
@@ -324,7 +323,7 @@ namespace aberration {
 			tasks.Add(new PassLegacy("Final", delegate (GenerationProgress progress) {
                 
                 Vector2 spawnpoint = majorCaves[majorCaves.Count / 2];
-                while (!Main.tile[(int)spawnpoint.X, (int)spawnpoint.Y].active()) {
+                while (!Main.tile[(int)spawnpoint.X, (int)spawnpoint.Y].active() || Main.tile[(int)spawnpoint.X, (int)spawnpoint.Y].type == TileID.Trees) {
                     spawnpoint.Y++;
                 }
                 setRect((int)spawnpoint.X - 7, (int)spawnpoint.Y - 5, 14, 4, forced: true);
@@ -338,8 +337,12 @@ namespace aberration {
                 //right wall
                 setRect((int)spawnpoint.X + 7, (int)spawnpoint.Y - 4, 1, 4, TileID.WoodenBeam, forced: true);
                 //torches
-                WorldGen.PlaceTile((int)spawnpoint.X - 4, (int)spawnpoint.Y - 3, TileID.Torches);
-                WorldGen.PlaceTile((int)spawnpoint.X + 4, (int)spawnpoint.Y - 3, TileID.Torches);
+                WorldGen.KillTile((int)spawnpoint.X - 4, (int)spawnpoint.Y - 3);
+                WorldGen.KillTile((int)spawnpoint.X - 4, (int)spawnpoint.Y - 2);
+                WorldGen.PlaceTile((int)spawnpoint.X - 4, (int)spawnpoint.Y - 3, TileType<Tiles.IonizedLantern>());
+                WorldGen.KillTile((int)spawnpoint.X + 4, (int)spawnpoint.Y - 3);
+                WorldGen.KillTile((int)spawnpoint.X + 4, (int)spawnpoint.Y - 2);
+                WorldGen.PlaceTile((int)spawnpoint.X + 4, (int)spawnpoint.Y - 3, TileType<Tiles.IonizedLantern>());
 
                 //finally set spawnpoint
                 Main.spawnTileX = (int)spawnpoint.X;
@@ -348,29 +351,6 @@ namespace aberration {
                 //merchant
                 NPC.NewNPC(Main.spawnTileX * 16, Main.spawnTileY * 16, NPCID.Merchant, 1);
             }));
-            /*
-			int ShiniesIndex = tasks.FindIndex(genpass => genpass.Name.Equals("Shinies"));
-			if (ShiniesIndex != -1) {
-				// Next, we insert our step directly after the original "Shinies" step. 
-				// ExampleModOres is a method seen below.
-				tasks.Insert(ShiniesIndex + 1, new PassLegacy("Example Mod Ores", ExampleModOres));
-			}
-
-			// This second step that we add will go after "Traps" and follows the same pattern.
-			int TrapsIndex = tasks.FindIndex(genpass => genpass.Name.Equals("Traps"));
-			if (TrapsIndex != -1) {
-				tasks.Insert(TrapsIndex + 1, new PassLegacy("Example Mod Traps", ExampleModTraps));
-			}
-
-			int LivingTreesIndex = tasks.FindIndex(genpass => genpass.Name.Equals("Living Trees"));
-			if (LivingTreesIndex != -1) {
-				tasks.Insert(LivingTreesIndex + 1, new PassLegacy("Post Terrain", delegate (GenerationProgress progress) {
-					// We can inline the world generation code like this, but if exceptions happen within this code 
-					// the error messages are difficult to read, so making methods is better. This is called an anonymous method.
-					progress.Message = "What is it Lassie, did Timmy fall down a well?";
-					MakeWells();
-				}));
-			}*/
         }
         internal static bool[,] minorCave(bool[,] initial) {
             bool[,] output = new bool[initial.GetLength(0), initial.GetLength(1)];
@@ -391,29 +371,6 @@ namespace aberration {
             }
             return output;
         }
-        /*internal static List<Vector2> minorCaveBranch(Vector2 coordinates, float direction) {
-			Vector2 center = new Vector2((int)coordinates.X, (int)coordinates.Y);
-			int step = WorldGen.genRand.Next(50, 150);
-			coordinates.X += step;
-			coordinates = coordinates.RotatedBy(direction, center);
-			coordinates = new Vector2((int)coordinates.X, (int)coordinates.Y);
-			//if (!majorCaves.Contains(center)) throw new Exception("Center is somehow no longer on major line");
-			if (coordinates.X < 200 || coordinates.Y < 200 || coordinates.X > Main.maxTilesX - 200 || coordinates.Y > Main.maxTilesY - 200) return new List<Vector2>(0);
-			List<Vector2> tmp = new List<Vector2> { };
-			tmp.AddRange(bresenham(center, coordinates));
-			if(tmp.Count==0) tmp.AddRange(bresenham(coordinates, center));
-			//if (!tmp.Contains(center) || !tmp.Contains(center + new Vector2(0,1)) || !tmp.Contains(center + new Vector2(0, -1))) //throw new Exception("tmp is somehow no longer has center");
-
-			if (WorldGen.genRand.Next(3)!=0) {
-				direction += WorldGen.genRand.NextFloat((float)(-Math.PI / 6), (float)(Math.PI / 6));
-				tmp.AddRange(minorCave(coordinates, direction));
-				if(WorldGen.genRand.Next(3) == 0) { //branch
-					direction += WorldGen.genRand.NextFloat((float)(-30 * Math.PI / 180), (float)(30 * Math.PI / 180));
-					tmp.AddRange(minorCave(coordinates, direction));
-				}
-            }
-			return tmp;
-		}*/
         internal static void setRect(int x, int y, int w, int h, int type = -1, bool forced = false, int style = 0) {
             for (int cx = x; cx < x + w; cx++) {
                 for (int cy = y; cy < y + h; cy++) {
@@ -499,8 +456,12 @@ namespace aberration {
                             if (!Main.tile[gx, gy - 1].active()) {
                                 WorldGen.GrowTree(gx, gy);
                                 if (!Main.tile[gx, gy - 1].active()) {
-                                    if (WorldGen.genRand.Next(12) == 0) {
-                                        WorldGen.PlaceTile(gx, gy - 1, TileType<Tiles.IonizingMetal>(), forced: true);
+                                    if (WorldGen.genRand.Next(12) == 0 && IonizedLantern.canPlacePublic(gx,gy-1)) {
+                                        try {
+                                            WorldGen.PlaceTile(gx, gy - 1, TileType<Tiles.IonizedLantern>(), forced: true);
+                                        } catch {
+                                            WorldGen.PlaceTile(gx, gy - 1, 3, style: WorldGen.genRand.Next(1, 42)); //tall grass
+                                        }
                                     } else {
                                         WorldGen.PlaceTile(gx, gy - 1, 3, style: WorldGen.genRand.Next(1, 42)); //tall grass
                                     }
