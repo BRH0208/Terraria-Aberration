@@ -58,8 +58,8 @@ namespace aberration
 			}
 		}
 		public override void PostUpdate() {			
-			int RadiationCheckHeight = 211/48 * Main.maxTilesY; //Against how this seems, this is not in tile coordinates, it is in world coordinates
-			int RadiatedHeight = (13/4) * Main.maxTilesY;//These numbers ain't perfect: Probally should use world gen numbers at some point
+			int RadiationCheckHeight = (int) Main.rockLayer;
+			int RadiatedHeight = (int) Main.worldSurface - 100;
 			/*
 			//Lag Train station
 			//Make expensive proccesses happen on ticks at a specific point.
